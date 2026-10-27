@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CertificateData } from './types';
 import { INITIAL_CERTIFICATES } from './data/initialCertificates';
 import { CertificateCanvas } from './components/CertificateCanvas';
@@ -30,8 +30,12 @@ import {
   PenTool,
   RotateCcw,
   Calendar,
+  RefreshCw,
+  Database,
+  Cloud,
 } from 'lucide-react';
 import { formatThaiCertificateDate, parseThaiDateToIso } from './utils/dateUtils';
+import { certificateService } from './services/certificateService';
 
 export default function App() {
   const [certificates, setCertificates] = useState<CertificateData[]>(INITIAL_CERTIFICATES);
@@ -42,6 +46,11 @@ export default function App() {
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [isExportingSingle, setIsExportingSingle] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Central Database Online Sync State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
@@ -78,6 +87,48 @@ export default function App() {
     return () => window.removeEventListener('resize', updateOptimalZoom);
   }, [sidebarOpen]);
 
+  // Central Database Auto-Sync Callback
+  const fetchCertificatesFromCentral = useCallback(async (isBackground = false) => {
+    if (!isBackground) setIsSyncing(true);
+    try {
+      const serverCerts = await certificateService.getAll();
+      if (serverCerts && serverCerts.length > 0) {
+        setCertificates(serverCerts);
+        setIsOnline(true);
+        setLastSyncTime(new Date());
+      } else if (serverCerts === null) {
+        setIsOnline(false);
+      }
+    } catch (err) {
+      console.warn('Central sync error:', err);
+      setIsOnline(false);
+    } finally {
+      if (!isBackground) setIsSyncing(false);
+    }
+  }, []);
+
+  // Initial load and periodic background sync for multi-user collaboration
+  useEffect(() => {
+    fetchCertificatesFromCentral(false);
+
+    // Auto-sync every 8 seconds when page is visible
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchCertificatesFromCentral(true);
+      }
+    }, 8000);
+
+    const onFocus = () => {
+      fetchCertificatesFromCentral(true);
+    };
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [fetchCertificatesFromCentral]);
+
   // Navigate to previous / next certificate
   const handlePrevCert = () => {
     if (activeIndex > 0) {
@@ -91,11 +142,14 @@ export default function App() {
     }
   };
 
-  // Update current certificate
+  // Update current certificate & sync to central store
   const handleUpdateCertificate = (updated: CertificateData) => {
     setCertificates((prev) =>
       prev.map((c) => (c.id === updated.id ? updated : c))
     );
+    certificateService.update(updated).then((ok) => {
+      if (ok) setLastSyncTime(new Date());
+    });
   };
 
   // Reset to default
@@ -109,14 +163,17 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [certToDelete, setCertToDelete] = useState<CertificateData | null>(null);
 
-  // Add new certificate recipient from modal
+  // Add new certificate recipient from modal & sync to central store
   const handleAddRecipient = (newCert: CertificateData) => {
     const updated = [...certificates, newCert];
     setCertificates(updated);
     setSelectedCertId(newCert.id);
+    certificateService.create(newCert).then((ok) => {
+      if (ok) setLastSyncTime(new Date());
+    });
   };
 
-  // Duplicate current certificate
+  // Duplicate current certificate & sync to central store
   const handleDuplicateCurrent = () => {
     const newId = `cert-${Date.now()}`;
     const newOrder = certificates.length + 1;
@@ -128,9 +185,12 @@ export default function App() {
     };
     setCertificates([...certificates, duplicated]);
     setSelectedCertId(newId);
+    certificateService.create(duplicated).then((ok) => {
+      if (ok) setLastSyncTime(new Date());
+    });
   };
 
-  // Confirmed Delete of certificate
+  // Confirmed Delete of certificate & sync to central store
   const handleConfirmDelete = () => {
     if (!certToDelete) return;
     if (certificates.length <= 1) {
@@ -151,7 +211,11 @@ export default function App() {
     if (selectedCertId === certToDelete.id) {
       setSelectedCertId(reordered[0].id);
     }
+    const idToDelete = certToDelete.id;
     setCertToDelete(null);
+    certificateService.delete(idToDelete).then((ok) => {
+      if (ok) setLastSyncTime(new Date());
+    });
   };
 
   // Download Single PDF
@@ -173,7 +237,7 @@ export default function App() {
     window.print();
   };
 
-  // Apply international calendar date to all certificates
+  // Apply international calendar date to all certificates & sync to central store
   const handleApplyDateToAll = (newDateText: string, isoDate: string) => {
     setCertificates((prev) =>
       prev.map((c) => ({
@@ -182,6 +246,9 @@ export default function App() {
         issuedDateIso: isoDate,
       }))
     );
+    certificateService.bulkUpdateDate(newDateText, isoDate).then((ok) => {
+      if (ok) setLastSyncTime(new Date());
+    });
   };
 
   return (
@@ -206,18 +273,62 @@ export default function App() {
         </div>
 
         {/* Zone 2: Navigation and Contextual links */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-slate-600">
+        <nav className="hidden lg:flex items-center gap-5 text-sm font-medium text-slate-600">
           <span className="text-emerald-800 font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0">
             <Award className="w-4 h-4 text-emerald-600" />
-            <span>รางวัลปฏิบัติงานดีเด่น ๑๑ หมวด ({certificates.length} ฉบับ)</span>
+            <span>{certificates.length} ฉบับ</span>
           </span>
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 whitespace-nowrap shrink-0">
+          <span className="text-slate-300">·</span>
+
+          {/* Central Shared Cloud / Server Indicator */}
+          <div className="flex items-center gap-2">
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-sarabun font-medium transition-colors border ${
+                isOnline
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+              title={
+                isOnline
+                  ? `ฐานข้อมูลกลางออนไลน์ ใช้งานร่วมกันได้ทุกเครื่อง ซิงค์ล่าสุด: ${
+                      lastSyncTime ? lastSyncTime.toLocaleTimeString('th-TH') : 'เริ่มต้น'
+                    }`
+                  : 'กำลังพยายามเชื่อมต่อฐานข้อมูลกลาง...'
+              }
+            >
+              <span className="relative flex h-2 w-2">
+                {isOnline && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                )}
+                <span
+                  className={`relative inline-flex rounded-full h-2 w-2 ${
+                    isOnline ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                ></span>
+              </span>
+              <span className="font-prompt text-[11px] font-semibold">
+                {isOnline ? 'ฐานข้อมูลกลางออนไลน์' : 'ออฟไลน์'}
+              </span>
+              {lastSyncTime && (
+                <span className="text-[10px] text-slate-500 hidden xl:inline">
+                  ({lastSyncTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={() => fetchCertificatesFromCentral(false)}
+              disabled={isSyncing}
+              className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors"
+              title="กดเพื่อซิงค์ข้อมูลล่าสุดกับฐานข้อมูลกลางทันที"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+            </button>
+          </div>
+
+          <span className="text-slate-300">·</span>
+          <span className="text-slate-600 whitespace-nowrap shrink-0 text-xs">
             มาตรฐาน A4 แนวนอน
-          </span>
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 whitespace-nowrap shrink-0">
-            โทนสีเขียว ขาว น้ำเงิน พาสเทล
           </span>
         </nav>
 
