@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "Certificate": {
+      "title": "Certificate",
+      "description": "Certificate record for hospital award recipients",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "number" },
+        "certNumber": { "type": "string" },
+        "awardTitle": { "type": "string" },
+        "awardCategorySubtitle": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "recipientPosition": { "type": "string" },
+        "department": { "type": "string" },
+        "hospitalName": { "type": "string" },
+        "provinceText": { "type": "string" },
+        "fiscalYear": { "type": "string" },
+        "descriptionText": { "type": "string" },
+        "issuedDateText": { "type": "string" },
+        "issuedDateIso": { "type": "string" },
+        "useThaiDigits": { "type": "boolean" },
+        "leftSignatoryName": { "type": "string" },
+        "leftSignatoryPosition": { "type": "string" },
+        "rightSignatoryName": { "type": "string" },
+        "rightSignatoryPosition": { "type": "string" },
+        "theme": {
+          "type": "string",
+          "enum": ["pastel-green-blue", "pastel-emerald-navy", "pastel-mint-cyan"]
+        },
+        "orientation": {
+          "type": "string",
+          "enum": ["landscape", "portrait"]
+        },
+        "showSeal": { "type": "boolean" },
+        "showWatermark": { "type": "boolean" },
+        "signatureStyle": {
+          "type": "string",
+          "enum": ["digital", "line-only", "both"]
+        }
+      },
+      "required": [
+        "id",
+        "orderNumber",
+        "certNumber",
+        "awardTitle",
+        "recipientName",
+        "recipientPosition",
+        "hospitalName",
+        "fiscalYear",
+        "issuedDateText"
+      ]
+    }
+  },
+  "firestore": {
+    "/certificates/{certificateId}": {
+      "schema": "Certificate",
+      "description": "Collection of official certificates shared across hospital staff devices"
+    }
+  }
+}

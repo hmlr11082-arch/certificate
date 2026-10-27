@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper to validate document IDs
+    function isValidId(docId) {
+      return docId is string && docId.size() > 0 && docId.size() <= 64 && docId.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Helper to validate certificate document
+    function isValidCertificate(data) {
+      return data.keys().hasAll(['id', 'orderNumber', 'certNumber', 'awardTitle', 'recipientName', 'recipientPosition', 'hospitalName', 'fiscalYear', 'issuedDateText'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 64
+        && data.orderNumber is number
+        && data.certNumber is string && data.certNumber.size() <= 100
+        && data.awardTitle is string && data.awardTitle.size() <= 200
+        && data.recipientName is string && data.recipientName.size() <= 200
+        && data.recipientPosition is string && data.recipientPosition.size() <= 200
+        && data.hospitalName is string && data.hospitalName.size() <= 200
+        && data.fiscalYear is string && data.fiscalYear.size() <= 50
+        && data.issuedDateText is string && data.issuedDateText.size() <= 100;
+    }
+
+    match /certificates/{certificateId} {
+      allow read: if true;
+      allow create: if isValidId(certificateId) && isValidCertificate(request.resource.data);
+      allow update: if isValidId(certificateId) && isValidCertificate(request.resource.data);
+      allow delete: if isValidId(certificateId);
+    }
+  }
+}

@@ -6,6 +6,7 @@ import { CertificateEditor } from './components/CertificateEditor';
 import { BatchExportModal } from './components/BatchExportModal';
 import { AddRecipientModal } from './components/AddRecipientModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
+import { GoogleCloudModal } from './components/GoogleCloudModal';
 import {
   downloadCertificateAsPDF,
   downloadCertificateAsPNG,
@@ -50,10 +51,13 @@ export default function App() {
   // Central Database Online Sync State
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [syncSource, setSyncSource] = useState('Google Cloud');
+  const [showCloudDetailsModal, setShowCloudDetailsModal] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [remoteNotification, setRemoteNotification] = useState<string | null>(null);
 
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Active certificate object
   const activeCert = certificates.find((c) => c.id === selectedCertId) || certificates[0];
@@ -152,13 +156,14 @@ export default function App() {
 
   // Subscribe to real-time updates and setup active polling
   useEffect(() => {
-    // 1. Instant SSE push subscription (millisecond sync across devices)
+    // 1. Instant push subscription (millisecond sync across devices via Google Cloud)
     const unsubscribe = certificateService.subscribeToUpdates(
       (incoming, actionType) => {
         applyIncomingCertificates(incoming, actionType);
       },
-      (online) => {
+      (online, source) => {
         setIsOnline(online);
+        if (source) setSyncSource(source);
       }
     );
 
@@ -357,21 +362,16 @@ export default function App() {
           </span>
           <span className="text-slate-300">·</span>
 
-          {/* Central Shared Cloud / Server Indicator */}
+          {/* Google Cloud Central Indicator */}
           <div className="flex items-center gap-2">
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-sarabun font-medium transition-colors border ${
+            <button
+              onClick={() => setShowCloudDetailsModal(true)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-sarabun font-medium transition-all border shadow-2xs hover:shadow-xs cursor-pointer ${
                 isOnline
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100/75'
+                  : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
               }`}
-              title={
-                isOnline
-                  ? `ฐานข้อมูลกลางออนไลน์ ใช้งานร่วมกันได้ทุกเครื่อง ซิงค์ล่าสุด: ${
-                      lastSyncTime ? lastSyncTime.toLocaleTimeString('th-TH') : 'เริ่มต้น'
-                    }`
-                  : 'กำลังพยายามเชื่อมต่อฐานข้อมูลกลาง...'
-              }
+              title="คลิกเพื่อดูรายละเอียดการจัดเก็บบน Google Cloud และสำรองข้อมูล Google Drive"
             >
               <span className="relative flex h-2 w-2">
                 {isOnline && (
@@ -383,21 +383,25 @@ export default function App() {
                   }`}
                 ></span>
               </span>
+              <Cloud className="w-3.5 h-3.5 text-emerald-700" />
               <span className="font-prompt text-[11px] font-semibold">
-                {isOnline ? 'ฐานข้อมูลกลางออนไลน์' : 'ออฟไลน์'}
+                Google Cloud
+              </span>
+              <span className="text-[10px] text-emerald-700 font-mono hidden xl:inline font-medium">
+                (hmlr11082@gmail.com)
               </span>
               {lastSyncTime && (
-                <span className="text-[10px] text-slate-500 hidden xl:inline">
-                  ({lastSyncTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+                <span className="text-[10px] text-slate-500 hidden 2xl:inline">
+                  · {lastSyncTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
-            </div>
+            </button>
 
             <button
               onClick={() => fetchCertificatesFromCentral(false)}
               disabled={isSyncing}
               className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors"
-              title="กดเพื่อซิงค์ข้อมูลล่าสุดกับฐานข้อมูลกลางทันที"
+              title="กดเพื่อซิงค์ข้อมูลล่าสุดกับ Google Cloud ทันที"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
             </button>
@@ -535,18 +539,40 @@ export default function App() {
                   <Plus className="w-4 h-4" />
                   <span>เพิ่มรายชื่อผู้ได้รับรางวัล</span>
                 </button>
-                <button
-                  onClick={() => {
-                    if (confirm('ต้องการรีเซ็ตรายชื่อกลับเป็นชุดเริ่มต้น ๑๒ รายชื่อเดิมของโรงพยาบาลใช่หรือไม่?')) {
-                      setCertificates(INITIAL_CERTIFICATES);
-                      setSelectedCertId(INITIAL_CERTIFICATES[0].id);
-                    }
-                  }}
-                  className="text-[11px] text-slate-500 hover:text-slate-800 hover:underline flex items-center justify-center gap-1 pt-0.5 transition-colors"
-                >
-                  <RotateCcw className="w-3 h-3 text-slate-400" />
-                  <span>คืนค่าเริ่มต้น ๑๒ รายชื่อเดิม</span>
-                </button>
+
+                <div className="flex items-center gap-2 pt-0.5">
+                  <button
+                    onClick={() => setShowCloudDetailsModal(true)}
+                    className="flex-1 py-1.5 px-2 rounded-lg bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors"
+                    title="ดูข้อมูล Google Cloud และสำรองไฟล์สำหรับ Google Drive"
+                  >
+                    <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Google Cloud & Drive</span>
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      if (
+                        confirm(
+                          'ต้องการรีเซ็ตรายชื่อกลับเป็นชุดเริ่มต้น ๑๒ รายชื่อเดิมของโรงพยาบาลใช่หรือไม่?\nการรีเซ็ตนี้จะส่งผลต่อทุกเครื่องผ่าน Google Cloud'
+                        )
+                      ) {
+                        setIsSyncing(true);
+                        const resetList = await certificateService.reset();
+                        setIsSyncing(false);
+                        if (resetList) {
+                          setCertificates(resetList);
+                          setSelectedCertId(resetList[0].id);
+                        }
+                      }
+                    }}
+                    className="py-1.5 px-2 rounded-lg bg-white border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-500 hover:text-red-700 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors"
+                    title="คืนค่าเริ่มต้น ๑๒ รายชื่อเดิม"
+                  >
+                    <RotateCcw className="w-3 h-3 text-slate-400" />
+                    <span>รีเซ็ต</span>
+                  </button>
+                </div>
               </div>
             </>
           ) : (
@@ -786,6 +812,28 @@ export default function App() {
         onClose={() => setCertToDelete(null)}
         onConfirm={handleConfirmDelete}
         cert={certToDelete}
+      />
+
+      {/* GOOGLE CLOUD & GOOGLE DRIVE MODAL */}
+      <GoogleCloudModal
+        isOpen={showCloudDetailsModal}
+        onClose={() => setShowCloudDetailsModal(false)}
+        certificates={certificates}
+        isOnline={isOnline}
+        lastSyncTime={lastSyncTime}
+        onRefresh={() => fetchCertificatesFromCentral(false)}
+        onImportSuccess={async (importedList) => {
+          setCertificates(importedList);
+          setSelectedCertId(importedList[0]?.id || '');
+          setIsSyncing(true);
+          for (const cert of importedList) {
+            await certificateService.create(cert);
+          }
+          setIsSyncing(false);
+          setLastSyncTime(new Date());
+          setRemoteNotification(`นำเข้าข้อมูล ${importedList.length} รายการลง Google Cloud เรียบร้อยแล้ว`);
+          setTimeout(() => setRemoteNotification(null), 3500);
+        }}
       />
     </div>
   );
