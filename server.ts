@@ -17,32 +17,68 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Helper to read certificates from disk
+// In-memory cache for fast synchronization
+let inMemoryCertificates: CertificateData[] = [];
+
+// Helper to read certificates from disk / memory
 function readCertificates(): CertificateData[] {
+  if (inMemoryCertificates.length > 0) {
+    return inMemoryCertificates;
+  }
   try {
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(content);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        inMemoryCertificates = parsed;
+        return inMemoryCertificates;
       }
     }
   } catch (err) {
     console.error('Error reading certificates from disk:', err);
   }
   // Fallback to initial certificates and seed disk
-  writeCertificates(INITIAL_CERTIFICATES);
-  return INITIAL_CERTIFICATES;
+  inMemoryCertificates = [...INITIAL_CERTIFICATES];
+  writeCertificates(inMemoryCertificates, false);
+  return inMemoryCertificates;
 }
 
-// Helper to write certificates to disk
-function writeCertificates(certs: CertificateData[]): void {
+// Active SSE client connections for real-time push to all devices
+const sseClients = new Set<express.Response>();
+
+function broadcastUpdate(certs: CertificateData[], actionType: string = 'UPDATE') {
+  inMemoryCertificates = certs;
+  const payload = JSON.stringify({
+    type: actionType,
+    certificates: certs,
+    count: certs.length,
+    timestamp: new Date().toISOString(),
+  });
+
+  for (const client of sseClients) {
+    try {
+      client.write(`event: certificate_update\ndata: ${payload}\n\n`);
+    } catch (err) {
+      sseClients.delete(client);
+    }
+  }
+}
+
+// Helper to write certificates to disk and broadcast to all connected devices
+function writeCertificates(certs: CertificateData[], shouldBroadcast: boolean = true): void {
+  inMemoryCertificates = certs;
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(certs, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing certificates to disk:', err);
   }
+  if (shouldBroadcast) {
+    broadcastUpdate(certs);
+  }
 }
+
+// Preload certificates on startup
+readCertificates();
 
 async function startServer() {
   const app = express();
@@ -50,7 +86,54 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
-  // =================== CENTRAL STORAGE API ===================
+  // =================== ANTI-CACHE & CORS MIDDLEWARE ===================
+  // Ensure browsers (mobile, tablet, desktop) and proxies NEVER cache API responses
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    next();
+  });
+
+  // =================== REAL-TIME SSE STREAM ===================
+  // All devices connect here to receive instant updates when names are added/deleted/edited
+  app.get('/api/certificates/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering on Nginx/Cloud Run proxies
+    res.flushHeaders?.();
+
+    // Send initial state immediately upon connection
+    const current = readCertificates();
+    const initialPayload = JSON.stringify({
+      type: 'INIT',
+      certificates: current,
+      count: current.length,
+      timestamp: new Date().toISOString(),
+    });
+    res.write(`event: certificate_update\ndata: ${initialPayload}\n\n`);
+
+    sseClients.add(res);
+
+    // Heartbeat every 15s to keep connection alive through Cloud Run / mobile networks
+    const heartbeatTimer = setInterval(() => {
+      try {
+        res.write(`: heartbeat ${Date.now()}\n\n`);
+      } catch {
+        clearInterval(heartbeatTimer);
+        sseClients.delete(res);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeatTimer);
+      sseClients.delete(res);
+    });
+  });
+
+  // =================== CENTRAL STORAGE REST API ===================
 
   // 1. Get all certificates from central store
   app.get('/api/certificates', (req, res) => {
@@ -67,7 +150,7 @@ async function startServer() {
     }
   });
 
-  // 2. Add a new recipient certificate
+  // 2. Add a new recipient certificate (instantly broadcasts to all devices)
   app.post('/api/certificates', (req, res) => {
     try {
       const newCert: CertificateData = req.body;
@@ -76,12 +159,16 @@ async function startServer() {
       }
 
       const certificates = readCertificates();
-      const updated = [...certificates, newCert];
-      writeCertificates(updated);
+      // Ensure unique ID
+      const certId = newCert.id || `cert-${Date.now()}`;
+      const certWithId = { ...newCert, id: certId };
+      const updated = [...certificates, certWithId];
+      
+      writeCertificates(updated, true); // Writes to disk and broadcasts to all devices
 
       res.status(201).json({
         success: true,
-        certificate: newCert,
+        certificate: certWithId,
         count: updated.length,
         timestamp: new Date().toISOString(),
       });
@@ -90,7 +177,7 @@ async function startServer() {
     }
   });
 
-  // 3. Update an existing certificate
+  // 3. Update an existing certificate (instantly broadcasts to all devices)
   app.put('/api/certificates/:id', (req, res) => {
     try {
       const certId = req.params.id;
@@ -102,12 +189,13 @@ async function startServer() {
         return res.status(404).json({ success: false, error: 'Certificate not found' });
       }
 
-      certificates[index] = { ...certificates[index], ...updatedCert, id: certId };
-      writeCertificates(certificates);
+      const updatedList = [...certificates];
+      updatedList[index] = { ...updatedList[index], ...updatedCert, id: certId };
+      writeCertificates(updatedList, true);
 
       res.json({
         success: true,
-        certificate: certificates[index],
+        certificate: updatedList[index],
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -115,7 +203,7 @@ async function startServer() {
     }
   });
 
-  // 4. Delete a certificate and re-sequence order numbers
+  // 4. Delete a certificate and re-sequence order numbers (instantly broadcasts to all devices)
   app.delete('/api/certificates/:id', (req, res) => {
     try {
       const certId = req.params.id;
@@ -131,7 +219,7 @@ async function startServer() {
         orderNumber: idx + 1,
       }));
 
-      writeCertificates(reordered);
+      writeCertificates(reordered, true); // Writes to disk & broadcasts to all devices!
 
       res.json({
         success: true,

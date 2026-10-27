@@ -51,6 +51,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [remoteNotification, setRemoteNotification] = useState<string | null>(null);
 
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
@@ -87,15 +88,57 @@ export default function App() {
     return () => window.removeEventListener('resize', updateOptimalZoom);
   }, [sidebarOpen]);
 
+  // Apply incoming certificates from central server and handle selected cert ID safely
+  const applyIncomingCertificates = useCallback((incomingCerts: CertificateData[], actionType = 'UPDATE') => {
+    if (!incomingCerts || incomingCerts.length === 0) return;
+
+    setCertificates((prev) => {
+      // Check if data actually changed to avoid unnecessary re-renders
+      if (
+        prev.length === incomingCerts.length &&
+        prev.every(
+          (c, idx) =>
+            c.id === incomingCerts[idx].id &&
+            c.recipientName === incomingCerts[idx].recipientName &&
+            c.awardCategorySubtitle === incomingCerts[idx].awardCategorySubtitle &&
+            c.recipientPosition === incomingCerts[idx].recipientPosition &&
+            c.issuedDateText === incomingCerts[idx].issuedDateText &&
+            c.signatureStyle === incomingCerts[idx].signatureStyle
+        )
+      ) {
+        return prev;
+      }
+      return incomingCerts;
+    });
+
+    setSelectedCertId((prevSelectedId) => {
+      // If currently selected certificate still exists, keep it
+      const exists = incomingCerts.some((c) => c.id === prevSelectedId);
+      if (exists) return prevSelectedId;
+      // If currently selected certificate was deleted from another device, switch safely
+      return incomingCerts[0]?.id || '';
+    });
+
+    setIsOnline(true);
+    setLastSyncTime(new Date());
+
+    if (actionType !== 'INIT') {
+      const msg =
+        actionType === 'DELETE'
+          ? `มีการลบรายชื่อจากอุปกรณ์อื่นแล้ว (เหลือ ${incomingCerts.length} ฉบับ)`
+          : `ซิงค์รายชื่อล่าสุดจากอุปกรณ์อื่นแล้ว (${incomingCerts.length} ฉบับ)`;
+      setRemoteNotification(msg);
+      setTimeout(() => setRemoteNotification(null), 3000);
+    }
+  }, []);
+
   // Central Database Auto-Sync Callback
   const fetchCertificatesFromCentral = useCallback(async (isBackground = false) => {
     if (!isBackground) setIsSyncing(true);
     try {
       const serverCerts = await certificateService.getAll();
       if (serverCerts && serverCerts.length > 0) {
-        setCertificates(serverCerts);
-        setIsOnline(true);
-        setLastSyncTime(new Date());
+        applyIncomingCertificates(serverCerts, 'INIT');
       } else if (serverCerts === null) {
         setIsOnline(false);
       }
@@ -105,29 +148,46 @@ export default function App() {
     } finally {
       if (!isBackground) setIsSyncing(false);
     }
-  }, []);
+  }, [applyIncomingCertificates]);
 
-  // Initial load and periodic background sync for multi-user collaboration
+  // Subscribe to real-time updates and setup active polling
   useEffect(() => {
+    // 1. Instant SSE push subscription (millisecond sync across devices)
+    const unsubscribe = certificateService.subscribeToUpdates(
+      (incoming, actionType) => {
+        applyIncomingCertificates(incoming, actionType);
+      },
+      (online) => {
+        setIsOnline(online);
+      }
+    );
+
+    // 2. Fetch on mount
     fetchCertificatesFromCentral(false);
 
-    // Auto-sync every 8 seconds when page is visible
+    // 3. Fallback active polling every 3 seconds when page is open
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchCertificatesFromCentral(true);
       }
-    }, 8000);
+    }, 3000);
 
-    const onFocus = () => {
-      fetchCertificatesFromCentral(true);
+    // 4. Instant sync on tab focus or screen unlock
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchCertificatesFromCentral(true);
+      }
     };
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
 
     return () => {
+      unsubscribe();
       clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
     };
-  }, [fetchCertificatesFromCentral]);
+  }, [applyIncomingCertificates, fetchCertificatesFromCentral]);
 
   // Navigate to previous / next certificate
   const handlePrevCert = () => {
@@ -164,17 +224,21 @@ export default function App() {
   const [certToDelete, setCertToDelete] = useState<CertificateData | null>(null);
 
   // Add new certificate recipient from modal & sync to central store
-  const handleAddRecipient = (newCert: CertificateData) => {
+  const handleAddRecipient = async (newCert: CertificateData) => {
     const updated = [...certificates, newCert];
     setCertificates(updated);
     setSelectedCertId(newCert.id);
-    certificateService.create(newCert).then((ok) => {
-      if (ok) setLastSyncTime(new Date());
-    });
+    setIsSyncing(true);
+    const ok = await certificateService.create(newCert);
+    setIsSyncing(false);
+    if (ok) {
+      setLastSyncTime(new Date());
+      setIsOnline(true);
+    }
   };
 
   // Duplicate current certificate & sync to central store
-  const handleDuplicateCurrent = () => {
+  const handleDuplicateCurrent = async () => {
     const newId = `cert-${Date.now()}`;
     const newOrder = certificates.length + 1;
     const duplicated: CertificateData = {
@@ -185,13 +249,17 @@ export default function App() {
     };
     setCertificates([...certificates, duplicated]);
     setSelectedCertId(newId);
-    certificateService.create(duplicated).then((ok) => {
-      if (ok) setLastSyncTime(new Date());
-    });
+    setIsSyncing(true);
+    const ok = await certificateService.create(duplicated);
+    setIsSyncing(false);
+    if (ok) {
+      setLastSyncTime(new Date());
+      setIsOnline(true);
+    }
   };
 
   // Confirmed Delete of certificate & sync to central store
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!certToDelete) return;
     if (certificates.length <= 1) {
       alert('ต้องมีใบประกาศอย่างน้อย 1 ฉบับในระบบ');
@@ -199,7 +267,8 @@ export default function App() {
       return;
     }
 
-    const filtered = certificates.filter((c) => c.id !== certToDelete.id);
+    const idToDelete = certToDelete.id;
+    const filtered = certificates.filter((c) => c.id !== idToDelete);
     // Re-index order numbers sequentially
     const reordered = filtered.map((c, idx) => ({
       ...c,
@@ -208,14 +277,18 @@ export default function App() {
     setCertificates(reordered);
 
     // If the active cert was deleted, select the first remaining
-    if (selectedCertId === certToDelete.id) {
-      setSelectedCertId(reordered[0].id);
+    if (selectedCertId === idToDelete) {
+      setSelectedCertId(reordered[0]?.id || '');
     }
-    const idToDelete = certToDelete.id;
     setCertToDelete(null);
-    certificateService.delete(idToDelete).then((ok) => {
-      if (ok) setLastSyncTime(new Date());
-    });
+
+    setIsSyncing(true);
+    const ok = await certificateService.delete(idToDelete);
+    setIsSyncing(false);
+    if (ok) {
+      setLastSyncTime(new Date());
+      setIsOnline(true);
+    }
   };
 
   // Download Single PDF
@@ -238,7 +311,7 @@ export default function App() {
   };
 
   // Apply international calendar date to all certificates & sync to central store
-  const handleApplyDateToAll = (newDateText: string, isoDate: string) => {
+  const handleApplyDateToAll = async (newDateText: string, isoDate: string) => {
     setCertificates((prev) =>
       prev.map((c) => ({
         ...c,
@@ -246,9 +319,13 @@ export default function App() {
         issuedDateIso: isoDate,
       }))
     );
-    certificateService.bulkUpdateDate(newDateText, isoDate).then((ok) => {
-      if (ok) setLastSyncTime(new Date());
-    });
+    setIsSyncing(true);
+    const ok = await certificateService.bulkUpdateDate(newDateText, isoDate);
+    setIsSyncing(false);
+    if (ok) {
+      setLastSyncTime(new Date());
+      setIsOnline(true);
+    }
   };
 
   return (
