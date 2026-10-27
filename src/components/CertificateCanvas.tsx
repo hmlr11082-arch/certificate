@@ -258,23 +258,8 @@ export const CertificateCanvas: React.FC<CertificateCanvasProps> = ({
           {/* FOOTER SECTION: SIGNATURES & SEAL */}
           <div className="relative pt-2">
             <div className="grid grid-cols-2 gap-12 sm:gap-20 items-end px-12">
-              {/* LEFT SIGNATURE: พนมพร พลเสนา */}
-              <div className="flex flex-col items-center text-center">
-                {/* Blank space for real pen signature */}
-                <div className="h-16 flex flex-col justify-end items-center relative w-64 pb-1">
-                  {cert.signatureStyle === 'digital' ? (
-                    <span className="font-charm text-2xl font-bold text-blue-900 tracking-wider select-none transform -rotate-2 mb-1">
-                      พนมพร พลเสนา
-                    </span>
-                  ) : (
-                    /* Blank signature line for real pen signing */
-                    <div className="w-full flex items-center justify-center text-slate-500 font-sarabun text-xs select-none mb-1">
-                      <span className="text-slate-600 mr-1.5 text-[12px] font-medium">ลงชื่อ</span>
-                      <span className="border-b border-dotted border-slate-500 w-44 inline-block translate-y-[-2px]"></span>
-                    </div>
-                  )}
-                </div>
-
+              {/* LEFT SIGNATORY: พนมพร พลเสนา (มีเฉพาะชื่อและตำแหน่ง ไม่มีแถบลงชื่อ) */}
+              <div className="flex flex-col items-center text-center w-64">
                 <p className="font-sarabun text-sm font-semibold text-slate-900 mt-1 whitespace-nowrap">
                   ({cert.leftSignatoryName})
                 </p>

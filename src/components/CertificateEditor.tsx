@@ -288,7 +288,7 @@ export const CertificateEditor: React.FC<CertificateEditorProps> = ({
           {/* Left Signatory */}
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
             <span className="text-xs font-semibold text-emerald-800 block">
-              ผู้ลงนามฝั่งซ้าย
+              ผู้ลงนาม / ผู้รับรองฝั่งซ้าย (แสดงเฉพาะชื่อและตำแหน่ง)
             </span>
             <div>
               <label className="block text-[11px] text-slate-600 mb-0.5">ชื่อ-นามสกุล</label>
