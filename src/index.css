@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Sarabun', sans-serif;
+  }
+}
+
+.font-sarabun {
+  font-family: 'Sarabun', sans-serif;
+}
+
+.font-serif-thai {
+  font-family: 'Noto Serif Thai', serif;
+}
+
+.font-prompt {
+  font-family: 'Prompt', sans-serif;
+}
+
+.font-charm {
+  font-family: 'Charm', cursive;
+}
+
+/* Certificate specific styling */
+@page {
+  size: A4 landscape;
+  margin: 0;
+}
+
+@media print {
+  body {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+
+  .print-container {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .certificate-page {
+    page-break-after: always;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    width: 297mm !important;
+    height: 210mm !important;
+  }
+}
