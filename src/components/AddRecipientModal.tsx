@@ -53,13 +53,13 @@ export const AddRecipientModal: React.FC<AddRecipientModalProps> = ({
       issuedDateText: formatThaiCertificateDate(issuedDateIso, true),
       issuedDateIso: issuedDateIso,
       useThaiDigits: true,
-      leftSignatoryName: 'พนมพร พลเสนา',
-      leftSignatoryPosition: 'พยาบาลชำนาญการพิเศษ',
+      leftSignatoryName: '',
+      leftSignatoryPosition: '',
       rightSignatoryName: 'นพ.พุทธรักษ์ ดีสิน',
       rightSignatoryPosition: 'ผู้อำนวยการ โรงพยาบาลท่าคันโท',
       theme: 'pastel-green-blue',
       orientation: 'landscape',
-      showSeal: true,
+      showSeal: false,
       showWatermark: true,
       signatureStyle: 'line-only', // Blank space for real pen signing
     };

@@ -282,38 +282,13 @@ export const CertificateEditor: React.FC<CertificateEditorProps> = ({
         {/* Signatures Settings */}
         <div className="pt-3 border-t border-slate-200 space-y-4">
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            ผู้ลงนาม (๒ ลายเซ็นตามที่กำหนด)
+            ผู้ลงนามรับรอง (ตรงกลาง)
           </label>
 
-          {/* Left Signatory */}
-          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-            <span className="text-xs font-semibold text-emerald-800 block">
-              ผู้ลงนาม / ผู้รับรองฝั่งซ้าย (แสดงเฉพาะชื่อและตำแหน่ง)
-            </span>
-            <div>
-              <label className="block text-[11px] text-slate-600 mb-0.5">ชื่อ-นามสกุล</label>
-              <input
-                type="text"
-                value={cert.leftSignatoryName}
-                onChange={(e) => handleChange('leftSignatoryName', e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-slate-900 text-xs font-sarabun"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-600 mb-0.5">ตำแหน่ง</label>
-              <input
-                type="text"
-                value={cert.leftSignatoryPosition}
-                onChange={(e) => handleChange('leftSignatoryPosition', e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-slate-900 text-xs font-sarabun"
-              />
-            </div>
-          </div>
-
-          {/* Right Signatory */}
+          {/* Center Signatory (Hospital Director) */}
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
             <span className="text-xs font-semibold text-blue-900 block">
-              ผู้ลงนามฝั่งขวา
+              ผู้ลงนามรับรอง (ผู้อำนวยการโรงพยาบาล)
             </span>
             <div>
               <label className="block text-[11px] text-slate-600 mb-0.5">ชื่อ-นามสกุล</label>
@@ -421,18 +396,6 @@ export const CertificateEditor: React.FC<CertificateEditorProps> = ({
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <label className="text-xs text-slate-700 cursor-pointer flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={cert.showSeal}
-                onChange={(e) => handleChange('showSeal', e.target.checked)}
-                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-              />
-              <span>แสดงตราประทับเกียรติยศ (Seal)</span>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
             <label className="text-xs text-slate-700 cursor-pointer flex items-center gap-2">
               <input
                 type="checkbox"

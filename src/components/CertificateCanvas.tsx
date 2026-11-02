@@ -255,63 +255,31 @@ export const CertificateCanvas: React.FC<CertificateCanvasProps> = ({
             </p>
           </div>
 
-          {/* FOOTER SECTION: SIGNATURES & SEAL */}
-          <div className="relative pt-2">
-            <div className="grid grid-cols-2 gap-12 sm:gap-20 items-end px-12">
-              {/* LEFT SIGNATORY: พนมพร พลเสนา (มีเฉพาะชื่อและตำแหน่ง ไม่มีแถบลงชื่อ) */}
-              <div className="flex flex-col items-center text-center w-64">
-                <p className="font-sarabun text-sm font-semibold text-slate-900 mt-1 whitespace-nowrap">
-                  ({cert.leftSignatoryName})
-                </p>
-                <p className="font-sarabun text-xs text-slate-600 mt-0.5 whitespace-nowrap">
-                  {cert.leftSignatoryPosition}
-                </p>
-              </div>
-
-              {/* RIGHT SIGNATURE: นพ.พุทธรักษ์ ดีสิน */}
-              <div className="flex flex-col items-center text-center">
-                {/* Blank space for real pen signature */}
-                <div className="h-16 flex flex-col justify-end items-center relative w-64 pb-1">
-                  {cert.signatureStyle === 'digital' ? (
-                    <span className="font-charm text-2xl font-bold text-blue-900 tracking-wider select-none transform -rotate-1 mb-1">
-                      พุทธรักษ์ ดีสิน
-                    </span>
-                  ) : (
-                    /* Blank signature line for real pen signing */
-                    <div className="w-full flex items-center justify-center text-slate-500 font-sarabun text-xs select-none mb-1">
-                      <span className="text-slate-600 mr-1.5 text-[12px] font-medium">ลงชื่อ</span>
-                      <span className="border-b border-dotted border-slate-500 w-44 inline-block translate-y-[-2px]"></span>
-                    </div>
-                  )}
-                </div>
-
-                <p className="font-sarabun text-sm font-semibold text-slate-900 mt-1 whitespace-nowrap">
-                  ({cert.rightSignatoryName})
-                </p>
-                <p className="font-sarabun text-xs text-slate-600 mt-0.5 whitespace-nowrap">
-                  {cert.rightSignatoryPosition}
-                </p>
-              </div>
-            </div>
-
-            {/* Official Center Gold/Teal Seal Medallion (Optional) */}
-            {cert.showSeal && (
-              <div className="absolute left-1/2 -bottom-2 -translate-x-1/2 pointer-events-none flex flex-col items-center">
-                <div className="w-16 h-16 rounded-full border-2 border-amber-400 bg-gradient-to-tr from-amber-100 via-emerald-100 to-sky-100 shadow-md flex items-center justify-center p-1 text-center">
-                  <div className="w-full h-full rounded-full border border-dashed border-emerald-600/70 flex flex-col items-center justify-center p-0.5">
-                    <span className="text-[7.5px] font-prompt font-bold text-emerald-900 leading-tight">
-                      รพ.ท่าคันโท
-                    </span>
-                    <span className="text-[8px] font-sarabun font-extrabold text-blue-900">
-                      ๒๕๖๙
-                    </span>
-                    <span className="text-[6.5px] font-sarabun text-emerald-800">
-                      ดีเด่น
-                    </span>
+          {/* FOOTER SECTION: SINGLE CENTERED SIGNATORY (HOSPITAL DIRECTOR) */}
+          <div className="relative pt-2 flex justify-center">
+            <div className="flex flex-col items-center text-center">
+              {/* Blank space for real pen signature */}
+              <div className="h-16 flex flex-col justify-end items-center relative w-72 pb-1">
+                {cert.signatureStyle === 'digital' ? (
+                  <span className="font-charm text-2xl font-bold text-blue-900 tracking-wider select-none transform -rotate-1 mb-1">
+                    พุทธรักษ์ ดีสิน
+                  </span>
+                ) : (
+                  /* Blank signature line for real pen signing */
+                  <div className="w-full flex items-center justify-center text-slate-500 font-sarabun text-xs select-none mb-1">
+                    <span className="text-slate-600 mr-1.5 text-[12px] font-medium">ลงชื่อ</span>
+                    <span className="border-b border-dotted border-slate-500 w-48 inline-block translate-y-[-2px]"></span>
                   </div>
-                </div>
+                )}
               </div>
-            )}
+
+              <p className="font-sarabun text-sm font-semibold text-slate-900 mt-1 whitespace-nowrap">
+                ({cert.rightSignatoryName || 'นพ.พุทธรักษ์ ดีสิน'})
+              </p>
+              <p className="font-sarabun text-xs text-slate-600 mt-0.5 whitespace-nowrap">
+                {cert.rightSignatoryPosition || 'ผู้อำนวยการ โรงพยาบาลท่าคันโท'}
+              </p>
+            </div>
           </div>
         </div>
       </div>
